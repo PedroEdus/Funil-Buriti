@@ -68,19 +68,12 @@ def formatar_numero(valor):
 
 
 def exibir_logo():
-    caminhos_logo = [
-        "LOGO BRASIL TERRENOS_2_BRANCA.png",
-        "logo.png",
-        "Logo.png",
-        "LOGO.png"
-    ]
+    caminho = "assets/logo.png"
 
-    for caminho in caminhos_logo:
-        if os.path.exists(caminho):
-            st.image(caminho, width=300)
-            return
-
-    st.caption("Logo não encontrada na pasta do app.")
+    if os.path.exists(caminho):
+        st.image(caminho, width=300)
+    else:
+        st.warning("Logo não encontrada em assets/logo.png")
 
 
 # =========================
