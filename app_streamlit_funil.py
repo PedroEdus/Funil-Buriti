@@ -1,4 +1,5 @@
 import os
+import base64
 
 import streamlit as st
 import pandas as pd
@@ -9,6 +10,14 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+
+
+# =========================
+# CONFIGURAÇÕES VISUAIS
+# =========================
+
+LOGO_CLARA = "assets/logo_preta.png"    # usada no modo claro
+LOGO_ESCURA = "assets/logo_branca.png"  # usada no modo escuro
 
 
 @st.cache_data
@@ -44,7 +53,6 @@ def carregar_dados(arquivo):
     if "TempoTotal" in df.columns:
         df["TempoTotal"] = pd.to_numeric(df["TempoTotal"], errors="coerce").fillna(0)
 
-    # Ajuste solicitado:
     # OUTROS deixa de ser categoria final do funil e passa a ser ACOMPANHAMENTO.
     # Isso evita o painel mostrar zero caso a base antiga ainda venha com OUTROS.
     if "Etapa_NF" in df.columns:
@@ -67,20 +75,130 @@ def formatar_numero(valor):
     return f"{valor:,.0f}".replace(",", ".")
 
 
-def exibir_logo():
-    caminho = "assets/logo.png"
+def imagem_base64(caminho):
+    with open(caminho, "rb") as arquivo:
+        return base64.b64encode(arquivo.read()).decode("utf-8")
 
-    if os.path.exists(caminho):
-        st.image(caminho, width=300)
-    else:
-        st.warning("Logo não encontrada em assets/logo.png")
+
+def exibir_logo_responsiva():
+    """
+    Exibe logo preta no modo claro e logo branca no modo escuro.
+
+    Arquivos esperados:
+    - assets/logo_preta.png
+    - assets/logo_branca.png
+    """
+    existe_logo_clara = os.path.exists(LOGO_CLARA)
+    existe_logo_escura = os.path.exists(LOGO_ESCURA)
+
+    if not existe_logo_clara and not existe_logo_escura:
+        st.warning(
+            "Nenhuma logo encontrada. Adicione 'logo_preta.png' e 'logo_branca.png' na pasta assets."
+        )
+        return
+
+    # Fallback: se só uma logo existir, usa a mesma nos dois modos.
+    caminho_claro = LOGO_CLARA if existe_logo_clara else LOGO_ESCURA
+    caminho_escuro = LOGO_ESCURA if existe_logo_escura else LOGO_CLARA
+
+    logo_clara_b64 = imagem_base64(caminho_claro)
+    logo_escura_b64 = imagem_base64(caminho_escuro)
+
+    st.markdown(
+        f"""
+        <style>
+            .logo-container {{
+                width: 100%;
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
+                margin-bottom: 0.75rem;
+            }}
+
+            .logo-container img {{
+                width: min(300px, 70vw);
+                height: auto;
+            }}
+
+            .logo-dark {{
+                display: none;
+            }}
+
+            @media (prefers-color-scheme: dark) {{
+                .logo-light {{
+                    display: none;
+                }}
+                .logo-dark {{
+                    display: block;
+                }}
+            }}
+        </style>
+
+        <div class="logo-container">
+            <img class="logo-light" src="data:image/png;base64,{logo_clara_b64}" alt="Logo Buriti modo claro">
+            <img class="logo-dark" src="data:image/png;base64,{logo_escura_b64}" alt="Logo Buriti modo escuro">
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def tema_plotly():
+    """
+    Usa o tema base do Streamlit quando disponível.
+    Isso melhora a leitura dos gráficos no modo claro/escuro.
+    """
+    tema_base = st.get_option("theme.base")
+
+    if tema_base == "dark":
+        return "plotly_dark"
+
+    return "plotly_white"
+
+
+def ajustar_layout_grafico(fig, altura=500):
+    fig.update_layout(
+        height=altura,
+        template=tema_plotly(),
+        margin=dict(l=20, r=40, t=70, b=30),
+        uniformtext_minsize=10,
+        uniformtext_mode="hide"
+    )
+    return fig
+
+
+def adicionar_rotulos_barras(fig, coluna_texto):
+    """
+    Adiciona rótulos numéricos em gráficos de barra.
+    Funciona bem para barras horizontais e verticais.
+    """
+    fig.update_traces(
+        texttemplate="%{text}",
+        textposition="outside",
+        cliponaxis=False,
+        textfont_size=12,
+        text=coluna_texto
+    )
+    fig.update_layout(
+        xaxis=dict(automargin=True),
+        yaxis=dict(automargin=True)
+    )
+    return fig
+
+
+def adicionar_rotulos_funil(fig):
+    fig.update_traces(
+        texttemplate="%{value:,.0f}",
+        textposition="inside"
+    )
+    return fig
 
 
 # =========================
 # CABEÇALHO
 # =========================
 
-exibir_logo()
+exibir_logo_responsiva()
 
 st.title("Painel CRM - Funil Digital")
 st.caption("Análise operacional dos leads por etapa, origem, campanha, produto e responsável.")
@@ -238,9 +356,11 @@ with aba1:
             funil_principal,
             x="Leads",
             y="Etapa_NF",
-            title="Funil por Etapa NF"
+            title="Funil por Etapa NF",
+            template=tema_plotly()
         )
-        fig_funil.update_layout(height=420)
+        fig_funil = adicionar_rotulos_funil(fig_funil)
+        fig_funil = ajustar_layout_grafico(fig_funil, altura=420)
 
         col_a.plotly_chart(fig_funil, use_container_width=True)
 
@@ -265,9 +385,14 @@ with aba1:
                     names="On/Off",
                     values="Leads",
                     hole=0.45,
-                    title="Distribuição On/Off"
+                    title="Distribuição On/Off",
+                    template=tema_plotly()
                 )
-                fig_onoff.update_layout(height=340)
+                fig_onoff.update_traces(
+                    textinfo="label+value+percent",
+                    texttemplate="%{label}<br>%{value:,.0f} (%{percent})"
+                )
+                fig_onoff = ajustar_layout_grafico(fig_onoff, altura=340)
 
                 st.plotly_chart(fig_onoff, use_container_width=True)
             else:
@@ -290,9 +415,12 @@ with aba1:
             x="Data",
             y="Leads",
             markers=True,
-            title="Evolução diária de leads"
+            text="Leads",
+            title="Evolução diária de leads",
+            template=tema_plotly()
         )
-        fig_linha.update_layout(height=360)
+        fig_linha.update_traces(textposition="top center")
+        fig_linha = ajustar_layout_grafico(fig_linha, altura=360)
         st.plotly_chart(fig_linha, use_container_width=True)
 
 # =========================
@@ -311,15 +439,20 @@ with aba2:
             .sort_values("Leads", ascending=False)
             .head(15)
         )
+        origem["Leads_formatado"] = origem["Leads"].map(formatar_numero)
 
         fig_origem = px.bar(
             origem,
             x="Leads",
             y="UtmSource",
             orientation="h",
-            title="Top origens de leads"
+            text="Leads_formatado",
+            title="Top origens de leads",
+            template=tema_plotly()
         )
-        fig_origem.update_layout(yaxis={"categoryorder": "total ascending"}, height=500)
+        fig_origem.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig_origem = adicionar_rotulos_barras(fig_origem, origem["Leads_formatado"])
+        fig_origem = ajustar_layout_grafico(fig_origem, altura=500)
         col_a.plotly_chart(fig_origem, use_container_width=True)
     else:
         col_a.warning("Coluna 'UtmSource' não encontrada na base.")
@@ -333,15 +466,20 @@ with aba2:
             .sort_values("Leads", ascending=False)
             .head(15)
         )
+        campanha["Leads_formatado"] = campanha["Leads"].map(formatar_numero)
 
         fig_campanha = px.bar(
             campanha,
             x="Leads",
             y="UtmCampaign",
             orientation="h",
-            title="Top campanhas"
+            text="Leads_formatado",
+            title="Top campanhas",
+            template=tema_plotly()
         )
-        fig_campanha.update_layout(yaxis={"categoryorder": "total ascending"}, height=500)
+        fig_campanha.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig_campanha = adicionar_rotulos_barras(fig_campanha, campanha["Leads_formatado"])
+        fig_campanha = ajustar_layout_grafico(fig_campanha, altura=500)
         col_b.plotly_chart(fig_campanha, use_container_width=True)
     else:
         col_b.warning("Coluna 'UtmCampaign' não encontrada na base.")
@@ -373,15 +511,20 @@ with aba3:
             .sort_values("Leads", ascending=False)
             .head(20)
         )
+        cidades["Leads_formatado"] = cidades["Leads"].map(formatar_numero)
 
         fig_cidades = px.bar(
             cidades,
             x="Leads",
             y="Cidade",
             orientation="h",
-            title="Top cidades por volume de leads"
+            text="Leads_formatado",
+            title="Top cidades por volume de leads",
+            template=tema_plotly()
         )
-        fig_cidades.update_layout(yaxis={"categoryorder": "total ascending"}, height=600)
+        fig_cidades.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig_cidades = adicionar_rotulos_barras(fig_cidades, cidades["Leads_formatado"])
+        fig_cidades = ajustar_layout_grafico(fig_cidades, altura=600)
         col_a.plotly_chart(fig_cidades, use_container_width=True)
     else:
         col_a.warning("Coluna 'Cidade' não encontrada na base.")
@@ -395,15 +538,20 @@ with aba3:
             .sort_values("Leads", ascending=False)
             .head(20)
         )
+        forma_cadastro["Leads_formatado"] = forma_cadastro["Leads"].map(formatar_numero)
 
         fig_forma = px.bar(
             forma_cadastro,
             x="Leads",
             y="FormaCadastro",
             orientation="h",
-            title="Leads por forma de cadastro"
+            text="Leads_formatado",
+            title="Leads por forma de cadastro",
+            template=tema_plotly()
         )
-        fig_forma.update_layout(yaxis={"categoryorder": "total ascending"}, height=600)
+        fig_forma.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig_forma = adicionar_rotulos_barras(fig_forma, forma_cadastro["Leads_formatado"])
+        fig_forma = ajustar_layout_grafico(fig_forma, altura=600)
         col_b.plotly_chart(fig_forma, use_container_width=True)
     else:
         col_b.warning("Coluna 'FormaCadastro' não encontrada na base.")
@@ -448,15 +596,20 @@ with aba4:
             .sort_values("Leads", ascending=False)
             .head(20)
         )
+        produto["Leads_formatado"] = produto["Leads"].map(formatar_numero)
 
         fig_produto = px.bar(
             produto,
             x="Leads",
             y="Produto",
             orientation="h",
-            title="Top produtos"
+            text="Leads_formatado",
+            title="Top produtos",
+            template=tema_plotly()
         )
-        fig_produto.update_layout(yaxis={"categoryorder": "total ascending"}, height=600)
+        fig_produto.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig_produto = adicionar_rotulos_barras(fig_produto, produto["Leads_formatado"])
+        fig_produto = ajustar_layout_grafico(fig_produto, altura=600)
         col_a.plotly_chart(fig_produto, use_container_width=True)
     else:
         col_a.warning("Coluna 'Produto' não encontrada na base.")
@@ -475,19 +628,24 @@ with aba4:
             .sort_values("Leads", ascending=False)
             .head(20)
         )
+        responsavel["Leads_formatado"] = responsavel["Leads"].map(formatar_numero)
 
         fig_resp = px.bar(
             responsavel,
             x="Leads",
             y="Responsavel",
             orientation="h",
-            title="Top responsáveis por volume de leads"
+            text="Leads_formatado",
+            title="Top responsáveis por volume de leads",
+            template=tema_plotly()
         )
-        fig_resp.update_layout(yaxis={"categoryorder": "total ascending"}, height=600)
+        fig_resp.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig_resp = adicionar_rotulos_barras(fig_resp, responsavel["Leads_formatado"])
+        fig_resp = ajustar_layout_grafico(fig_resp, altura=600)
         col_b.plotly_chart(fig_resp, use_container_width=True)
 
         st.subheader("Resumo por responsável")
-        st.dataframe(responsavel, use_container_width=True)
+        st.dataframe(responsavel.drop(columns=["Leads_formatado"], errors="ignore"), use_container_width=True)
     else:
         col_b.warning("Colunas 'Responsavel' e/ou 'Codigo' não encontradas na base.")
 
