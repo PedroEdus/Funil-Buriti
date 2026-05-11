@@ -1,0 +1,19 @@
+# Credenciais e variáveis de ambiente
+.env
+*.json
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Sistema
+.DS_Store
+Thumbs.db
