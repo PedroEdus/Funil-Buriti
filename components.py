@@ -384,7 +384,16 @@ def grafico_cidades(df: pd.DataFrame) -> None:
     if "Cidade" not in df.columns:
         st.warning("Coluna Cidade não encontrada.")
         return
-    resumo = _agrupar(df, "Cidade", top=20)
+    df2 = df.copy()
+    df2["Cidade"] = df2["Cidade"].fillna("Não Informado").astype(str).str.strip()
+    df2 = df2[df2["Cidade"] != ""]
+    resumo = (
+        df2.groupby("Cidade")
+        .size()
+        .reset_index(name="Leads")
+        .sort_values("Leads", ascending=False)
+        .head(20)
+    )
     _barras_h(resumo, "Leads", "Cidade", "Top cidades", altura=600)
 
 
@@ -417,11 +426,25 @@ def matrizes_cidade_forma(df: pd.DataFrame) -> None:
 # ── Aba Operação ──────────────────────────────────────────────────────────────
 
 def grafico_produto(df: pd.DataFrame) -> None:
-    if "Produto" not in df.columns:
-        st.warning("Coluna Produto não encontrada.")
+    if not {"Produto", "Cidade"}.issubset(df.columns):
+        st.warning("Colunas Produto e/ou Cidade não encontradas.")
         return
-    resumo = _agrupar(df, "Produto", top=20)
-    _barras_h(resumo, "Leads", "Produto", "Leads por produto", altura=500)
+
+    df2 = df.copy()
+    df2["Produto"] = df2["Produto"].fillna("Não Informado").astype(str).str.strip()
+    df2["Cidade"]  = df2["Cidade"].fillna("Não Informado").astype(str).str.strip()
+    df2 = df2[(df2["Produto"] != "") & (df2["Cidade"] != "")]
+
+    resumo = (
+        df2.groupby(["Produto", "Cidade"])
+        .size()
+        .reset_index(name="Leads")
+        .sort_values("Leads", ascending=False)
+        .head(20)
+    )
+    resumo["Produto — Cidade"] = resumo["Produto"] + "  ·  " + resumo["Cidade"]
+
+    _barras_h(resumo, "Leads", "Produto — Cidade", "Leads por produto e cidade", altura=600)
 
 
 def grafico_responsavel(df: pd.DataFrame) -> None:
